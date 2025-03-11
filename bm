@@ -1,0 +1,520 @@
+#!/bin/bash
+
+# Help function
+container_help() {
+    cat <<EOF
+Usage: bm <command> [options] <bookmarks-name>
+
+Commands:
+  run       Create and start the bookmarks container interactively
+  start     Start container in detached mode (same as: run -d)
+  stop      Stop the running bookmarks container
+  restart   Restart the bookmarks container
+  log       Show logs from the bookmarks container
+  config    Display the Docker Compose configuration
+           -e        Configure environment variables (port, paths, credentials)
+  admin     Run commands in the container:
+           -s        Open an interactive shell
+           -x        Execute a shell command
+           [args]    Run Django manage.py commands (default)
+  delete    Delete container, environment file and data (DANGEROUS!)
+  help      Show this help message
+
+Examples:
+  bm run mybookmarks          # Create and start container interactively
+  bm run -d mybookmarks      # Create and start container in background
+  bm start mybookmarks       # Start container in background
+  bm stop mybookmarks        # Stop the container
+  bm css mybookmarks         # Generate custom theme CSS
+  bm admin -t mybookmarks    # Open interactive shell in container
+  bm admin mybookmarks shell # Run Django shell in container
+
+Notes:
+  - First run will create a .env file if port 9090 is in use
+  - assets/custom-logo.png will replace default logo if present
+  - Generated CSS files are named: <bookmarks>-custom[-light|-dark].css
+EOF
+}
+
+# Main container function
+container() {
+    if [ $# -lt 1 ]; then
+        container_help
+        return 1
+    fi
+
+    # Get script directory and change to it
+    SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+    pushd "$SCRIPT_DIR" &> /dev/null || { echo "Error: Could not change to script directory"; exit 1; }
+
+    # Set up trap to ensure we popd on any exit
+    trap 'popd &> /dev/null' EXIT
+
+    COMMAND=$1
+    shift
+
+   # Initialize OPTIONS array
+    OPTIONS=()
+
+    # Parse options and bookmarks name
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -*)
+                OPTIONS+=("$1")
+                shift
+                ;;
+            *)
+                export BOOKMARKS_NAME=$1
+                shift
+                break
+                ;;
+        esac
+    done
+
+    # Ensure bookmarks name is provided for commands that need it
+    if [[ -z "$BOOKMARKS_NAME" ]] && [[ "$COMMAND" != "help" ]]; then
+        echo "Error: Bookmarks name is required"
+        container_help
+        exit 1
+    fi
+
+    export COMPOSE_PROJECT_NAME=$BOOKMARKS_NAME
+    export ENV_FILE=containers/$BOOKMARKS_NAME.env
+    export HOST_PORT=9090
+
+    # Remaining arguments are passed to the command
+    ARGS=("$@")
+
+    export LD_SUPERUSER_NAME=admin
+    # Password for the initial superuser, leave empty to disable credentials authentication and rely on proxy authentication instead
+    export LD_SUPERUSER_PASSWORD=admin
+
+    if [[ -f $ENV_FILE ]]; then
+        set -a; source $ENV_FILE; set +a
+    fi
+
+     export HOST_VOLUME_PATH=${HOST_VOLUME_PATH:-${BOOKMARKS_HOST_VOLUME_DIR:-${PWD}}/bookmarks/${BOOKMARKS_NAME}}
+
+    if [[ "$COMMAND" == "run" || "$COMMAND" == "start" ]]; then
+        # Create the directory HOST_VOLUME_PATH quietly but exit with a message if it cannot be made
+        mkdir -p "$HOST_VOLUME_PATH" > /dev/null 2>&1 || { echo "Failed to create directory $HOST_VOLUME_PATH"; exit 1; }
+
+        # Check if HOST_PORT is being used and if so ask the user if they want to search for an available port
+        if nc -z localhost "$HOST_PORT" 2>/dev/null; then
+            read -p "Port $HOST_PORT is in use. Do you want to search for an available port? (y/n): " choice
+            if [[ "$choice" == "y" || "$choice" == "Y" ]]; then
+                for i in {0..9}; do
+                    HOST_PORT=$((HOST_PORT + 1))
+                    if ! nc -z localhost "$HOST_PORT" 2>/dev/null; then
+                        echo "Found available port $HOST_PORT"
+                        echo "Saving HOST_PORT=$HOST_PORT to $ENV_FILE"
+                        echo "HOST_PORT=$HOST_PORT" >> "$ENV_FILE"
+                        break
+                    fi
+                    if [ $i -eq 9 ]; then
+                        echo "No available ports found after trying 10 ports starting from $HOST_PORT"
+                        exit 1
+                    fi
+                done
+            else
+                echo "Please add a port manually to the $ENV_FILE file. Example:"
+                echo "HOST_PORT=<your_port>"
+                exit 1
+            fi
+        fi
+    fi
+
+    export HOST_PORT
+
+    # Construct docker-compose command
+    docker_compose="docker-compose -f compose.yml"
+    [[ -f $ENV_FILE ]] && docker_compose+=" --env-file $ENV_FILE"
+    [[ -f assets/custom-logo.png ]] && docker_compose+=" -f compose.logo.yml"
+
+
+    if [[ $LD_DEBUG ]]; then
+        echo $docker_compose 
+        echo $HOST_VOLUME_PATH
+        echo $BOOKMARKS_NAME
+        echo $HOST_PORT
+        env || grep LD_
+    fi    
+
+
+    case "$COMMAND" in
+        run|start)
+            # Create empty env file if it doesn't exist (for first-run detection)
+            if [[ ! -f "$ENV_FILE" ]]; then
+                mkdir -p "$(dirname "$ENV_FILE")" &>/dev/null
+                touch "$ENV_FILE"
+                echo -e "\nFirst time running '$BOOKMARKS_NAME' bookmarks container."
+                echo "This will:"
+                echo "1. Create data directory: $HOST_VOLUME_PATH"
+                echo "2. Use default port: ${HOST_PORT}"
+                echo "3. Use default admin credentials: admin/admin"
+                echo -e "\nWould you like to configure these settings first? (y/n): "
+                read -r configure
+                if [[ $configure =~ ^[Yy] ]]; then
+                    container_env "$BOOKMARKS_NAME"
+                    # Re-source the env file after configuration
+                    set -a; source "$ENV_FILE"; set +a
+                fi
+            fi
+
+            # Execute the command
+            cmd="$docker_compose up"
+            [[ $COMMAND == 'start' ]] && cmd+=" -d"
+            echo "Executing: $cmd"
+            $cmd
+            ;;
+        stop)
+            $docker_compose stop
+            ;;
+        log)
+            $docker_compose logs -f
+            ;;
+        restart)
+            $docker_compose restart
+            ;;
+        config)
+            if [[ " ${OPTIONS[@]} " =~ " -e " ]]; then
+                container_env "$BOOKMARKS_NAME"
+            else
+                $docker_compose config
+            fi
+            ;;
+        admin)
+            if [[ " ${OPTIONS[@]} " =~ " -x " ]]; then
+                docker exec -it ${BOOKMARKS_NAME}-bookmarks ${ARGS[@]}
+                return
+            fi
+            if [[ " ${OPTIONS[@]} " =~ " -s " ]]; then
+                docker exec -it ${BOOKMARKS_NAME}-bookmarks bash -l
+                return 
+            fi
+            docker exec -it ${BOOKMARKS_NAME}-bookmarks python manage.py "${ARGS[@]}"
+            ;;
+        css)
+            bm_customcss "$BOOKMARKS_NAME"
+            ;;
+        delete)
+            # Check if anything exists to delete
+            if ! docker ps -a | grep -q "${BOOKMARKS_NAME}-bookmarks" && \
+               ! [[ -f "$ENV_FILE" ]] && \
+               ! [[ -d "$HOST_VOLUME_PATH" ]]; then
+                echo "Nothing to delete - container, env file and data directory don't exist"
+                return 0
+            fi
+
+            echo -e "\033[1;31mWARNING: This will permanently delete:\033[0m"
+            [[ -n $(docker ps -a -q -f name="${BOOKMARKS_NAME}-bookmarks") ]] && \
+                echo "1. Container: ${BOOKMARKS_NAME}-bookmarks"
+            [[ -f "$ENV_FILE" ]] && \
+                echo "2. Environment file: $ENV_FILE"
+            [[ -d "$HOST_VOLUME_PATH" ]] && \
+                echo "3. Data directory: $HOST_VOLUME_PATH"
+            echo -e "\033[1;31mThis action cannot be undone!\033[0m"
+            
+            # First confirmation
+            echo -e "\nType 'yes' to continue: "
+            read -r confirm
+            [[ "$confirm" != "yes" ]] && { echo "Deletion cancelled."; return 1; }
+            
+            # Second confirmation - type bookmarks name
+            echo -e "\n\033[1;31mFinal warning!\033[0m"
+            echo -e "Type the bookmarks name '\033[1m$BOOKMARKS_NAME\033[0m' to confirm deletion: "
+            read -r confirm_name
+            if [[ "$confirm_name" != "$BOOKMARKS_NAME" ]]; then
+                echo "Names do not match. Deletion cancelled."
+                return 1
+            fi
+            
+            # Stop and remove container if it exists
+            if [[ -n $(docker ps -a -q -f name="${BOOKMARKS_NAME}-bookmarks") ]]; then
+                echo "Stopping and removing container..."
+                $docker_compose down
+                # Ensure container is removed even if compose fails
+                docker rm -f "${BOOKMARKS_NAME}-bookmarks" &>/dev/null || true
+            fi
+            
+            # Delete files if they exist
+            [[ -f "$ENV_FILE" ]] && rm -f "$ENV_FILE" && echo "Deleted environment file: $ENV_FILE"
+            [[ -d "$HOST_VOLUME_PATH" ]] && rm -rf "$HOST_VOLUME_PATH" && echo "Deleted data directory: $HOST_VOLUME_PATH"
+            
+            echo -e "\033[32mDeletion complete\033[0m"
+            ;;
+        help)
+            container_help
+            ;;
+        *)
+            echo "Unknown command: $COMMAND"
+            container_help
+            ;;
+    esac
+}
+
+# Environment configuration function
+container_env() {
+    local BOOKMARKS_NAME=$1
+    
+    # If env file exists, show it and offer options
+    if [[ -f "$ENV_FILE" ]]; then
+        echo -e "\nCurrent environment settings for $BOOKMARKS_NAME:"
+        echo -e "\n********************************"
+        cat "$ENV_FILE"
+        echo -e "\n********************************"
+        echo -e "\nWould you like to (e)dit directly or run the (c)onfigurator? [e/c]: "
+        read -r choice
+        case "$choice" in
+            [Ee]*) 
+                echo -e "Enter editor name (default: edit): "
+                read -r editor_name
+                ${editor_name:-edit} "$ENV_FILE"
+                return
+                ;;
+            [Cc]*) ;; # Continue to configurator
+            *) return ;;
+        esac
+    fi
+
+    local default_path="${PWD}/bookmarks/${BOOKMARKS_NAME}"
+    local current_path=${HOST_VOLUME_PATH:-${BOOKMARKS_HOST_VOLUME_DIR:-$default_path}}
+    local TEMP_ENV=$(mktemp)
+
+    # Copy existing env or start fresh
+    [[ -f "$ENV_FILE" ]] && cp "$ENV_FILE" "$TEMP_ENV"
+    
+    # Helper function to update temp env file
+    update_env_var() {
+        local key=$1
+        local value=$2
+        sed -i "/^${key}=/d" "$TEMP_ENV"
+        echo "${key}=${value}" >> "$TEMP_ENV"
+    }
+
+    # Host port configuration
+    echo -e "\nCurrent port: ${HOST_PORT:-9090}"
+    read -p "Enter new port (or Enter to keep, 'auto' for next available): " new_port
+    if [[ $new_port == "auto" ]]; then
+        new_port=$(find_available_port 9090)
+        echo "Found available port: $new_port"
+    fi
+    [[ -n $new_port ]] && update_env_var "HOST_PORT" "$new_port"
+
+    # Volume path configuration
+    echo -e "\nDefault data path: $default_path"
+    echo -e "Current path: $current_path"
+    echo "Enter new path option:"
+    echo "1) Full custom directory name"
+    echo "2) Base directory (will append /bookmarks/$BOOKMARKS_NAME, recommended)"
+    read -p "Choice [Enter to keep/reset default]: " path_choice
+
+    case "$path_choice" in
+        1)  read -p "Enter full custom path: " new_path
+            if [[ -n $new_path ]]; then
+                sed -i '/HOST_VOLUME_DIR=/d' "$TEMP_ENV"  # Remove DIR if exists
+                update_env_var "HOST_VOLUME_PATH" "$new_path"
+                echo "Updated path: $new_path"
+            fi
+            ;;
+        2)  read -p "Enter base directory: " new_dir
+            if [[ -n $new_dir ]]; then
+                sed -i '/HOST_VOLUME_PATH=/d' "$TEMP_ENV"  # Remove PATH if exists
+                update_env_var "HOST_VOLUME_DIR" "$new_dir"
+                echo "Updated path: $new_dir/bookmarks/$BOOKMARKS_NAME"
+            fi
+            ;;
+        "")  # Reset to default if current path is different
+            if [[ "$current_path" != "$default_path" ]]; then
+                # Remove any existing path entries
+                sed -i '/HOST_VOLUME_PATH=/d' "$TEMP_ENV"
+                sed -i '/HOST_VOLUME_DIR=/d' "$TEMP_ENV"
+                echo "Reset to default path: $default_path"
+            fi
+            ;;
+    esac
+
+    # Superuser configuration
+    echo -e "\nCurrent superuser: ${LD_SUPERUSER_NAME:-admin}"
+    read -p "Enter new superuser name (or Enter to keep): " new_user
+    [[ -n $new_user ]] && update_env_var "LD_SUPERUSER_NAME" "$new_user"
+
+    echo -e "\nCurrent password: ${LD_SUPERUSER_PASSWORD:-admin}"
+    read -p "Enter new password (or Enter to keep): " new_pass
+    [[ -n $new_pass ]] && update_env_var "LD_SUPERUSER_PASSWORD" "$new_pass"
+
+    # Show final config and ask for confirmation
+    echo -e "\nProposed environment settings:"
+    echo -e "\n********************************"
+    cat "$TEMP_ENV"
+    echo -e "\n********************************"
+    
+    echo -e "\nSave these settings? (y/n): "
+    read -r save_choice
+    if [[ $save_choice =~ ^[Yy] ]]; then
+        mkdir -p "$(dirname "$ENV_FILE")" &>/dev/null
+        mv "$TEMP_ENV" "$ENV_FILE"
+        echo "Settings saved to $ENV_FILE"
+        
+        echo -e "\nConfiguration complete! You can now:"
+        echo "- Start in foreground:  ./bm run $BOOKMARKS_NAME"
+        echo "- Start in background:  ./bm start $BOOKMARKS_NAME"
+    else
+        echo "Changes discarded"
+    fi
+    
+    # Clean up temp file
+    [[ -f "$TEMP_ENV" ]] && rm -f "$TEMP_ENV"
+}
+
+
+# Custom CSS generation function
+bm_customcss() {
+    local prefix="containers/${1:+$1-}"
+    local scheme_suffix=""   # Will be set after theme selection
+    local output_css="${prefix}custom.css"
+    local custom_title=""    # Variable to store title
+
+    echo "=== Linkding Custom CSS Generator ==="
+    echo -e "\nThis will generate '${output_css}' with custom title and/or color theme for linkding."
+    echo "After generation, you'll need to copy the CSS and paste the contents into"
+    echo "in the 'Custom CSS' field found in the Settings [General] page of the webu, Click Save."
+    echo -e "--------------------------------------------------------\n"
+
+    # Ask for custom site title first
+    echo -e "\nEnter custom site title (leave empty for default 'linkding'): "
+    read custom_title
+
+    # Color theme selection
+    echo -e "\nSelect a color theme:"
+    echo "1) Linkding Purple (no color theme change)"
+    echo "2) Forest Green"
+    echo "3) Ocean Blue"
+    echo "4) Crimson"
+    echo "5) Turquoise"
+    echo "Or enter a custom hex color (e.g., #FF5733)"
+    
+    read -p "Choice [1]: " choice
+    choice=${choice:-1}
+    
+    # Check for default case (no changes needed)
+    if [[ -z "$custom_title" && ($choice == "1" || -z "$choice") ]]; then
+        echo -e "\nNo changes requested - using default linkding theme and title."
+        echo "Your installation will use the default purple theme and 'linkding' title."
+        return 0
+    fi
+
+    # Process non-default theme choices
+    case $choice in
+        1|"") 
+         choice=""
+         ;;
+        2) base_color="#50B464"; color_name="Forest Green" ;;
+        3) base_color="#3D8DD1"; color_name="Ocean Blue" ;;
+        4) base_color="#D6223A"; color_name="Crimson" ;;
+        5) base_color="#22D6BB"; color_name="Turquoise" ;;
+        \#*) 
+            base_color="$choice"
+            if [[ ! $base_color =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+                echo "Error: Invalid hex color format. Please use format #RRGGBB"
+                exit 1
+            fi
+            echo -e "\nEnter a name for your custom theme: "
+            read color_name
+            color_name=${color_name:-"Custom"} ;;
+        *)
+            echo "Invalid selection, using default Purple theme"
+            base_color="#815EE8"
+            color_name="Purple (Default)" ;;
+    esac
+    
+    # Theme variant selection - skip for default theme
+    if [[ -n "$choice" ]]; then
+        echo -e "\nSelect scheme (d)ark or (l)ight [default: dark]: "
+        read scheme_choice
+        
+        if [[ $scheme_choice =~ ^[Ll] ]]; then
+            scheme="light"
+            scheme_suffix="-light"
+        else
+            scheme="dark"
+            scheme_suffix="-dark"
+        fi
+    fi
+
+    # Update output filename to include scheme
+    local output_css="${prefix}custom${scheme_suffix}.css"
+
+    # Generate initial CSS with header
+    cat << EOF > "$output_css"
+/* Custom CSS file for Linkding created on */
+/* $(date) */    
+$([[ $choice ]] && echo "/* Theme: ${color_name} (${base_color}) */")
+$([[ -n "$custom_title" ]] && echo "/* Title: ${custom_title} */")
+/* *******************************************/
+
+/* Header text styling */
+header h1 {
+    font-size: 0;
+}
+
+header h1::before {
+    content: "${custom_title:-linkding}";
+    font-size: 1.5rem;
+    color: var(--primary-text-color);
+}
+EOF
+
+    if [[ $choice ]]; then
+        echo -e "\nGenerating $scheme theme with base color $base_color ($color_name)"
+        python3 maketheme.py "$base_color" "$scheme" >> "$output_css"
+    fi
+
+    # Copy to clipboard if xclip is available
+    if type -P xclip &> /dev/null; then
+        cat "$output_css" | xclip -selection clipboard
+        echo 
+        echo "First few lines of generated CSS:"
+        head -n 5 "$output_css"
+        echo "..."
+        echo "CSS has been copied to clipboard and can be pasted directly into linkding's custom CSS field"
+    else
+        echo 
+        echo "**************CUSTOM LINKDING CSS *************"
+        cat "$output_css"
+        echo "*********************************************"
+        echo "Copy the above to linkding's custom CSS field in admin settings"
+    fi
+
+    # Keep editor option
+    if ! type -P xclip &> /dev/null; then
+        echo "Note: xclip not found. Install with your package manager to enable clipboard support"
+    fi
+    echo -e "\nWould you like to edit the CSS before using it? (y/n): "
+    read edit_choice
+
+    if [[ $edit_choice =~ ^[Yy] ]]; then
+        echo -e "Enter editor name (default: edit): "
+        read editor_name
+        editor_name=${editor_name:-edit}
+        
+        if type -P "$editor_name" &> /dev/null; then
+            $editor_name "$output_css" &
+            echo "After editing, the content will need to be copied manually to linkding's custom CSS field"
+        else
+            echo "Editor '$editor_name' not found, skipping..."
+        fi
+    fi
+}
+
+
+# Call the container function if the script is executed directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    if [ "$1" == "help" ] || [ "$#" -eq 0 ]; then
+        container_help
+    else
+        container "$@"
+    fi
+fi
+
+

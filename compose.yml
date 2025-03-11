@@ -1,0 +1,19 @@
+services:
+  bookmarks:
+    container_name: ${BOOKMARKS_NAME}-bookmarks
+    image: sissbruecker/linkding:latest
+    hostname: ${BOOKMARKS_NAME}-bookmarks
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      LD_SUPERUSER_NAME:
+      LD_SUPERUSER_PASSWORD:
+    env_file:
+      - path: containers/${BOOKMARKS_NAME}.env
+        required: false
+    volumes:
+      - type: bind
+        source: $HOST_VOLUME_PATH
+        target: /etc/linkding/data
+    restart: unless-stopped
+    ports:
+      - $HOST_PORT:9090

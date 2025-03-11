@@ -1,0 +1,7 @@
+services:
+  bookmarks:
+    volumes:
+      - type: bind
+        source: $PWD/assets/custom-logo.png
+        target: /etc/linkding/static/logo.png
+        read_only: true
