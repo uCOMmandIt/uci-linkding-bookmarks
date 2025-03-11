@@ -1,5 +1,4 @@
 bookmarks/
 /archive/
-/assets/
-/*.css
-/containers/
+/assets/*
+/containers/*

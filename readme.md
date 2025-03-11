@@ -18,8 +18,8 @@ git checkout -b my-machine-name
 3. Edit .gitignore to track your configurations:
 ```bash
 # Remove or comment out these lines:
-# /assets/
-# /containers/
+# /assets/*
+# /containers/*
 ```
 
 4. Start the container:
@@ -27,10 +27,26 @@ git checkout -b my-machine-name
 ./bm run mybookmarks
 ```
 
-On first run, you'll be prompted to:
-- Set custom port (or auto-detect available)
-- Configure data storage location
-- Set admin username/password
+> On first run, you'll be prompted to:
+> - Set custom port (or auto-detect available)
+> - Configure data storage location
+> - Set admin username/password
+
+
+
+5. Commit your branch:
+```bash
+git add .
+git commit -m "feat: add my machine configuration"
+git push origin my-machine-name
+```
+
+> **Data Storage Note:**  
+> By default, bookmark data in `bookmarks/` is not committed (recommended).  
+> To version control your bookmarks, either:
+> - Remove `bookmarks/` from .gitignore (not recommended)
+> - Use `HOST_VOLUME_DIR` to store data in a backed-up location (recommended)
+
 
 ## Features
 
@@ -48,7 +64,8 @@ Commands:
 - `stop`      Stop the running container
 - `restart`   Restart the container
 - `log`       Show logs from the container
-- `config -e` Configure environment variables
+- `config`   Display the Docker Compose configuration
+  - `-e` Configure environment variables (port, paths, credentials)
 - `css`       Generate custom CSS theme
 - `admin`     Run commands in container:
   - `-s`      Open interactive shell
