@@ -144,7 +144,8 @@ container() {
     case "$COMMAND" in
         run|start)
             # Check if container is already running
-            if docker ps -q -f name="${BOOKMARKS_NAME}-bookmarks" &>/dev/null; then
+            container_id=$(docker ps -q -f name="${BOOKMARKS_NAME}-bookmarks")
+            if [[ -n "$container_id" ]]; then
                 echo "Container ${BOOKMARKS_NAME}-bookmarks is already running"
                 echo "Use 'bm stop ${BOOKMARKS_NAME}' to stop it"
                 echo "    'bm restart ${BOOKMARKS_NAME}' to restart it"
