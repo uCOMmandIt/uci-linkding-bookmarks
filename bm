@@ -18,6 +18,7 @@ Commands:
            -x        Execute a shell command
            [args]    Run Django manage.py commands (default)
   delete    Delete container, environment file and data (DANGEROUS!)
+  status    Show status of all instances or specific instance
   help      Show this help message
 
 Examples:
@@ -38,22 +39,39 @@ EOF
 
 # Main container function
 container() {
+    COMMAND=$1
+
+    # Handle commands that don't need name checking
+    case "$COMMAND" in
+        upgrade)
+            image_upgrade
+            return
+            ;;
+        status)
+            shift
+            check_status "$@"
+            return
+            ;;
+        *)
+            ;;
+    esac
+
+    # Now check for minimum arguments
     if [ $# -lt 1 ]; then
         container_help
         return 1
     fi
 
+    shift
+
     # Get script directory and change to it
     SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-    pushd "$SCRIPT_DIR" &> /dev/null || { echo "Error: Could not change to script directory"; exit 1; }
+    pushd "$SCRIPT_DIR" &> /dev/null || { echo "Error: Could not change to script directory"; return 1; }
 
     # Set up trap to ensure we popd on any exit
     trap 'popd &> /dev/null' EXIT
 
-    COMMAND=$1
-    shift
-
-   # Initialize OPTIONS array
+    # Initialize OPTIONS array
     OPTIONS=()
 
     # Parse options and bookmarks name
@@ -75,7 +93,7 @@ container() {
     if [[ -z "$BOOKMARKS_NAME" ]] && [[ "$COMMAND" != "help" ]]; then
         echo "Error: Bookmarks name is required"
         container_help
-        exit 1
+        return 1
     fi
 
     export COMPOSE_PROJECT_NAME=$BOOKMARKS_NAME
@@ -97,7 +115,7 @@ container() {
 
     if [[ "$COMMAND" == "run" || "$COMMAND" == "start" ]]; then
         # Create the directory HOST_VOLUME_PATH quietly but exit with a message if it cannot be made
-        mkdir -p "$HOST_VOLUME_PATH" > /dev/null 2>&1 || { echo "Failed to create directory $HOST_VOLUME_PATH"; exit 1; }
+        mkdir -p "$HOST_VOLUME_PATH" > /dev/null 2>&1 || { echo "Failed to create directory $HOST_VOLUME_PATH"; return 1; }
 
         # Check if HOST_PORT is being used and if so ask the user if they want to search for an available port
         if nc -z localhost "$HOST_PORT" 2>/dev/null; then
@@ -113,13 +131,13 @@ container() {
                     fi
                     if [ $i -eq 9 ]; then
                         echo "No available ports found after trying 10 ports starting from $HOST_PORT"
-                        exit 1
+                        return 1
                     fi
                 done
             else
                 echo "Please add a port manually to the $ENV_FILE file. Example:"
                 echo "HOST_PORT=<your_port>"
-                exit 1
+                return 1
             fi
         fi
     fi
@@ -132,7 +150,7 @@ container() {
     [[ -f assets/custom-logo.png ]] && docker_compose+=" -f compose.logo.yml"
 
 
-    if [[ $LD_DEBUG ]]; then
+    if [[ $BM_DEBUG == "verbose" ]]; then
         echo $docker_compose 
         echo $HOST_VOLUME_PATH
         echo $BOOKMARKS_NAME
@@ -178,17 +196,19 @@ container() {
             cmd="$docker_compose up"
             [[ $COMMAND == 'start' ]] && cmd+=" -d"
             [[ ${#OPTIONS[@]} -gt 0 ]] && cmd+=" ${OPTIONS[*]}"
-            echo "Executing: $cmd"
             $cmd
+            return $?
             ;;
         stop)
             $docker_compose stop
+            return $?
             ;;
         log)
             $docker_compose logs -f
             ;;
         restart)
             $docker_compose restart
+            return $?
             ;;
         config)
             if [[ " ${OPTIONS[@]} " =~ " -e " ]]; then
@@ -265,6 +285,234 @@ container() {
             container_help
             ;;
     esac
+}
+
+ # Status check function
+check_status() {
+
+    local quiet
+    [[ "$1" == "-q" ]] && quiet=true && shift
+    
+    # Helper function for conditional echo
+    quiet() {
+        if [[ $quiet ]]; then
+            [[ "$1" == "-n" ]] && echo "$@"
+        else 
+            [[ "$1" == "-n" ]] && return
+            echo "$@"
+        fi
+    }
+
+   # If no name provided, show all instances
+   if [[ -z "$1" ]]; then
+
+   # Ensure the directory exists first
+    if [[ -d containers ]]; then
+        # Clear the array
+        instances=()
+        # Loop through files directly to avoid issues with basename in find
+        while IFS= read -r file; do
+            if [[ -n "$file" ]]; then
+            # Extract filename without the .env extension
+            filename=$(basename "$file" .env)
+            instances+=("$filename")
+            fi
+        done < <($(type -P find) containers -maxdepth 1 -type f -name "*.env" 2>/dev/null | sort)
+        
+        # Show the result or handle empty case
+        if [[ ${#instances[@]} -eq 0 ]]; then
+            echo "No linkding instances found in containers directory"
+            return
+        fi
+     else
+        echo "Directory 'containers' does not exist"
+    return
+    fi
+ 
+        # Array to collect running instances
+        running_instances=()
+        
+        # Check each instance
+        quiet "=== Linkding Instances Status ==="
+        for instance in "${instances[@]}"; do
+            if [[ -n $(docker ps -q -f name="${instance}-bookmarks") ]]; then
+                quiet "- $instance (RUNNING)"
+                running_instances+=("$instance")
+            else
+                quiet "- $instance (STOPPED)"
+            fi
+        done
+        
+        # Output running instances (space-separated) if any found
+        [[ ${#running_instances[@]} -gt 0 ]] && quiet -n "${running_instances[*]}"
+        return $((${#running_instances[@]} > 0 ? 0 : 1))
+    else
+        # Check if instance exists first
+        if [[ ! -f "containers/$1.env" ]]; then
+            quiet "Instance $1 does not exist"
+            return 2
+        fi
+        
+        # Check specific instance
+        if [[ -n $(docker ps -q -f name="$1-bookmarks") ]]; then
+            quiet "$1 is RUNNING"
+            return 0
+        else
+            quiet "$1 is STOPPED"
+            return 1
+        fi
+    fi
+}
+
+# Image upgrade function
+image_upgrade() {
+
+    # Find all env files to identify all instances
+    ENV_FILES=(containers/*.env)
+    if [ ${#ENV_FILES[@]} -eq 0 ]; then
+        echo "No linkding instances found, nothing to upgrade"
+        return 1
+    fi
+
+    # Set image name once and use it throughout
+    local image="sissbruecker/linkding"
+
+    if [[ -n "$BM_DEBUG" ]]; then
+       echo -e "\n\033[1;33mDebug mode: Bypassing version check\033[0m"
+     else
+
+
+        # Display header information
+        echo "=========================================================="
+        echo "LinkDing Update Checker"
+        echo "Current Date and Time (UTC): $(date -u '+%Y-%m-%d %H:%M:%S')"
+        echo "Checking image: $image"
+        echo "Docker Hub URL: https://hub.docker.com/r/sissbruecker/linkding"
+        echo "=========================================================="
+
+
+           # Get local and remote versions
+        LOCAL_VERSION=$(local_version)
+        if [ $? -ne 0 ]; then
+            echo "$LOCAL_VERSION"  # Error message from function
+            return 1
+        fi
+
+        echo "Local version: $LOCAL_VERSION"
+
+        # # Extract namespace and repository from image for API calls
+        REMOTE_VERSION=$(curl -s "https://hub.docker.com/v2/repositories/$image/tags?page_size=100" | \
+        jq -r '.results[].name' | \
+        grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | \
+        sort -t. -k1,1nr -k2,2nr -k3,3nr | \
+        head -n1)
+
+        echo "Latest available version: $REMOTE_VERSION"
+
+        # Compare versions
+        if [ "$LOCAL_VERSION" = "$REMOTE_VERSION" ]; then
+            echo -e "\033[1;32mYou have the latest version\033[0m, nothing to upgrade"
+            return 0
+        fi
+
+    fi
+
+    # Get running instances using check_status
+    echo -e "\nFound the following instances:"
+    RUNNING_INSTANCES=()
+    IFS=' ' read -r -a RUNNING_INSTANCES <<< "$(check_status -q)"
+    # echo running instances ${RUNNING_INSTANCES[@]}
+    # check_status -q
+    
+    # Show status of all instances
+    check_status
+
+    echo -e "\n\033[1;33mWARNING: This will upgrade ALL instances at once!\033[0m"
+    echo "The upgrade process will:"
+    echo "1. Stop all running instances"
+    echo "2. Pull the latest linkding image"
+    echo "3. Restart previously running instances"
+    
+    echo -e "\n\033[1;31mType 'yes' to proceed with upgrade: \033[0m"
+    read -r confirm
+    if [[ "$confirm" != "yes" ]]; then
+        echo "Upgrade cancelled"
+        return 1
+    fi
+
+    # Stop all running instances
+    if [ ${#RUNNING_INSTANCES[@]} -gt 0 ]; then
+        echo -e "\nStopping running instances..."
+        for instance in "${RUNNING_INSTANCES[@]}"; do
+            echo "Stopping $instance..."
+            if ! container stop "$instance"; then
+                echo "Error: Failed to stop $instance"
+                return 2
+            fi
+        done
+    fi
+
+    # Pull new image
+    echo -e "\nPulling latest linkding image..."
+    if ! docker pull "$image"; then
+        echo "Error: Failed to pull latest image"
+        echo Image: $image
+        retrun 2
+    fi
+
+    # Verify new version matches expected version
+    NEW_VERSION=$(local_version)
+
+    [[ $BM_DEBUG ]] && REMOTE_VERSION=$NEW_VERSION
+    if [ "$NEW_VERSION" != "$REMOTE_VERSION" ]; then
+        echo "Error: Version mismatch after pull. Expected $REMOTE_VERSION, got $NEW_VERSION"
+        return 3
+    fi
+
+    echo -e "\nUpgrade complete!"
+    echo "Installed version: $NEW_VERSION"
+
+    # Restart previously running instances
+    if [ ${#RUNNING_INSTANCES[@]} -gt 0 ]; then
+        echo -e "\nRestarting previously running instances..."
+        for instance in "${RUNNING_INSTANCES[@]}"; do
+            echo "Starting $instance..."
+            if ! container start "$instance"; then
+                echo "Error: Failed to start $instance"
+                echo "Please check the container logs and try starting it manually with:"
+                echo "  ./bm start $instance"
+                return 1
+            fi
+            
+            # Verify container is running
+            if ! check_status -q "$instance"; then
+                echo "Error: Container $instance failed to start"
+                echo "Please check the container logs and try starting it manually with:"
+                echo "  ./bm start $instance"
+                return 1
+            fi
+        done
+    fi
+
+    echo -e "\n\033[32mUpgrade complete!\033[0m"
+}
+
+# Get version from local image
+local_version() {
+    local image=${1:-$IMAGE}
+    image=${image:-sissbruecker/linkding}
+    # Create a temporary container without running the entrypoint
+    local CONTAINER_ID=$(docker create --entrypoint="" $image cat /etc/linkding/package.json)
+    if [ $? -ne 0 ]; then
+        echo "Error: Could not create temporary container. Is the image pulled?"
+        return 1
+    fi
+    # Extract the package.json content
+    local PACKAGE_JSON=$(docker start -a $CONTAINER_ID)
+    docker rm $CONTAINER_ID > /dev/null
+
+    # Extract and return the version
+    echo "$PACKAGE_JSON" | grep -o '"version": "[^"]*' | cut -d'"' -f4
 }
 
 # Environment configuration function
@@ -381,7 +629,6 @@ container_env() {
     [[ -f "$TEMP_ENV" ]] && rm -f "$TEMP_ENV"
 }
 
-
 # Custom CSS generation function
 bm_customcss() {
     local prefix="containers/${1:+$1-}"
@@ -431,7 +678,7 @@ bm_customcss() {
             base_color="$choice"
             if [[ ! $base_color =~ ^#[0-9A-Fa-f]{6}$ ]]; then
                 echo "Error: Invalid hex color format. Please use format #RRGGBB"
-                exit 1
+                return 1
             fi
             echo -e "\nEnter a name for your custom theme: "
             read color_name
@@ -518,6 +765,7 @@ EOF
         fi
     fi
 }
+
 
 
 # Call the container function if the script is executed directly
