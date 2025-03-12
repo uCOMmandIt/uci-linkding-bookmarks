@@ -11,6 +11,13 @@ git clone https://git.ucommandit.org/uci/uci-linkding-bookmarks.git bookmarks
 cd bookmarks
 ```
 
+> **Quick Start for CSS Only:**  
+> If you just want to generate custom CSS for an existing linkding instance:
+> ```bash
+> ./bm css anyname   # Generates CSS files for copy/paste into linkding settings
+> ```
+> see the [Customization](#customization) section below.
+
 2. Create a branch for your machine:
 ```bash
 git checkout -b my-machine-name
