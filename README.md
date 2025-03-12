@@ -58,30 +58,48 @@ git push myremote my-machine-name
 
 ## Usage
 
-Commands:
-- `run`       Create and start container interactively
-- `start`     Start container in detached mode
-- `stop`      Stop the running container
-- `restart`   Restart the container
-- `log`       Show logs from the container
-- `config`   Display the Docker Compose configuration
-  - `-e` Configure environment variables (port, paths, credentials)
-- `css`       Generate custom CSS theme
-- `admin`     Run commands in container:
-  - `-s`      Open interactive shell
-  - `-x`      Execute shell command
-  - `[args]`  Run Django manage.py commands
-- `delete`    Delete container and data (requires confirmation)
-
-## Examples
-
 ```bash
-./bm run personal           # Create and start container
-./bm start work            # Start container in background
-./bm config -e personal    # Configure environment
-./bm css personal         # Generate custom theme
-./bm admin -s personal    # Open shell in container
+bm <command> [options] <bookmarks-name>
 ```
+
+### Commands requiring bookmarks name:
+- `run`      Create and start the bookmarks container interactively
+- `start`    Start container in detached mode (same as: run -d)
+- `stop`     Stop the running bookmarks container
+- `restart`  Restart the bookmarks container
+- `log`      Show logs from the bookmarks container
+- `config`   Display the Docker Compose configuration
+           -e        Configure environment variables (port, paths, credentials)
+- `admin`    Run commands in the container:
+           -s        Open an interactive shell
+           -x        Execute a shell command
+           [args]    Run Django manage.py commands (default)
+- `delete`   Delete container, environment file and data (DANGEROUS!)
+
+### Commands with optional bookmarks name:
+- `status`   Show status of all instances or specific instance
+           -q        Quiet mode - only output running instance names
+
+### Commands that don't use bookmarks name:
+- `upgrade`  Upgrade all instances to latest linkding version
+- `help`     Show this help message
+
+### Examples
+```bash
+bm run mybookmarks          # Create and start container interactively
+bm run -d mybookmarks      # Create and start container in background
+bm start mybookmarks       # Start container in background
+bm stop mybookmarks        # Stop the container
+bm status                  # Show all instances status
+bm status -q              # List running instances (for scripts)
+bm status mybookmarks     # Check specific instance status
+bm upgrade               # Upgrade all instances to latest version
+```
+
+### Notes
+- First run will create a .env file if port 9090 is in use
+- assets/custom-logo.png will replace default logo if present
+- Generated CSS files are named: <bookmarks>-custom[-light|-dark].css
 
 ## Data Management
 

@@ -5,7 +5,7 @@ container_help() {
     cat <<EOF
 Usage: bm <command> [options] <bookmarks-name>
 
-Commands:
+Commands requiring bookmarks name:
   run       Create and start the bookmarks container interactively
   start     Start container in detached mode (same as: run -d)
   stop      Stop the running bookmarks container
@@ -18,7 +18,13 @@ Commands:
            -x        Execute a shell command
            [args]    Run Django manage.py commands (default)
   delete    Delete container, environment file and data (DANGEROUS!)
+
+Commands with optional bookmarks name:
   status    Show status of all instances or specific instance
+           -q        Quiet mode - only output running instance names
+
+Commands that don't use bookmarks name:
+  upgrade   Upgrade all instances to latest linkding version
   help      Show this help message
 
 Examples:
@@ -26,9 +32,10 @@ Examples:
   bm run -d mybookmarks      # Create and start container in background
   bm start mybookmarks       # Start container in background
   bm stop mybookmarks        # Stop the container
-  bm css mybookmarks         # Generate custom theme CSS
-  bm admin -t mybookmarks    # Open interactive shell in container
-  bm admin mybookmarks shell # Run Django shell in container
+  bm status                  # Show all instances status
+  bm status -q              # List running instances (for scripts)
+  bm status mybookmarks     # Check specific instance status
+  bm upgrade               # Upgrade all instances to latest version
 
 Notes:
   - First run will create a .env file if port 9090 is in use
