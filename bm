@@ -325,7 +325,7 @@ container_env() {
     case "$path_choice" in
         1)  read -p "Enter full custom path: " new_path
             if [[ -n $new_path ]]; then
-                sed -i '/HOST_VOLUME_DIR=/d' "$TEMP_ENV"  # Remove DIR if exists
+                sed -i '/BOOKMARKS_HOST_VOLUME_DIR=/d' "$TEMP_ENV"  # Remove DIR if exists
                 update_env_var "HOST_VOLUME_PATH" "$new_path"
                 echo "Updated path: $new_path"
             fi
@@ -333,7 +333,7 @@ container_env() {
         2)  read -p "Enter base directory: " new_dir
             if [[ -n $new_dir ]]; then
                 sed -i '/HOST_VOLUME_PATH=/d' "$TEMP_ENV"  # Remove PATH if exists
-                update_env_var "HOST_VOLUME_DIR" "$new_dir"
+                update_env_var "BOOKMARKS_HOST_VOLUME_DIR" "$new_dir"
                 echo "Updated path: $new_dir/bookmarks/$BOOKMARKS_NAME"
             fi
             ;;
@@ -341,7 +341,7 @@ container_env() {
             if [[ "$current_path" != "$default_path" ]]; then
                 # Remove any existing path entries
                 sed -i '/HOST_VOLUME_PATH=/d' "$TEMP_ENV"
-                sed -i '/HOST_VOLUME_DIR=/d' "$TEMP_ENV"
+                sed -i '/BOOKMARKS_HOST_VOLUME_DIR=/d' "$TEMP_ENV"
                 echo "Reset to default path: $default_path"
             fi
             ;;
