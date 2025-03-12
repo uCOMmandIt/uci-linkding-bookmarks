@@ -6,8 +6,9 @@ A Docker container management script for running multiple instances of the [link
 
 1. Clone this repository:
 ```bash
-git clone https://github.com/yourusername/linkding-bookmarks.git
-cd linkding-bookmarks
+cd /opt
+git clone https://git.ucommandit.org/uci/uci-linkding-bookmarks.git bookmarks
+cd bookmarks
 ```
 
 2. Create a branch for your machine:
@@ -22,7 +23,7 @@ git checkout -b my-machine-name
 # /containers/*
 ```
 
-4. Start the container:
+4. Start a new bookmarks container:
 ```bash
 ./bm run mybookmarks
 ```
@@ -32,13 +33,12 @@ git checkout -b my-machine-name
 > - Configure data storage location
 > - Set admin username/password
 
-
-
-5. Commit your branch:
+5. Running ok?  Commit your branch:
 ```bash
 git add .
-git commit -m "feat: add my machine configuration"
-git push origin my-machine-name
+git commit -m "feat: add first bookmarks configuration/instance"
+[ create a remote repo, set the remote]
+git push myremote my-machine-name
 ```
 
 > **Data Storage Note:**  

@@ -223,8 +223,8 @@ def generate_theme(base_color: str, scheme: str = 'dark') -> str:
 
     /* Form elements */
     --checkbox-bg-color: var(--contrast-10);
-    --checkbox-checked-bg-color: var(--primary-color);
-    --checkbox-disabled-bg-color: var(--contrast-30);
+    --checkbox-checked-bg-color: var(--input-bg);
+    --checkbox-disabled-bg-color: var(--primary);
     --checkbox-border-color: var(--border-color);
     --checkbox-icon-color: var(--contrast-text-color);
 

@@ -143,7 +143,15 @@ container() {
 
     case "$COMMAND" in
         run|start)
-            # Create empty env file if it doesn't exist (for first-run detection)
+            # Check if container is already running
+            if docker ps -q -f name="${BOOKMARKS_NAME}-bookmarks" &>/dev/null; then
+                echo "Container ${BOOKMARKS_NAME}-bookmarks is already running"
+                echo "Use 'bm stop ${BOOKMARKS_NAME}' to stop it"
+                echo "    'bm restart ${BOOKMARKS_NAME}' to restart it"
+                return 1
+            fi
+
+            # First run configuration
             if [[ ! -f "$ENV_FILE" ]]; then
                 mkdir -p "$(dirname "$ENV_FILE")" &>/dev/null
                 touch "$ENV_FILE"
@@ -156,14 +164,19 @@ container() {
                 read -r configure
                 if [[ $configure =~ ^[Yy] ]]; then
                     container_env "$BOOKMARKS_NAME"
+                    if [[ ! -f "$ENV_FILE" ]]; then
+                        echo "Configuration cancelled. Run './bm config -e $BOOKMARKS_NAME' to configure later."
+                        return 1
+                    fi
                     # Re-source the env file after configuration
                     set -a; source "$ENV_FILE"; set +a
                 fi
             fi
 
-            # Execute the command
+            # Execute the command with any options
             cmd="$docker_compose up"
             [[ $COMMAND == 'start' ]] && cmd+=" -d"
+            [[ ${#OPTIONS[@]} -gt 0 ]] && cmd+=" ${OPTIONS[*]}"
             echo "Executing: $cmd"
             $cmd
             ;;
@@ -470,39 +483,37 @@ EOF
         python3 maketheme.py "$base_color" "$scheme" >> "$output_css"
     fi
 
-    # Copy to clipboard if xclip is available
-    if type -P xclip &> /dev/null; then
-        cat "$output_css" | xclip -selection clipboard
-        echo 
-        echo "First few lines of generated CSS:"
-        head -n 5 "$output_css"
-        echo "..."
-        echo "CSS has been copied to clipboard and can be pasted directly into linkding's custom CSS field"
-    else
-        echo 
-        echo "**************CUSTOM LINKDING CSS *************"
-        cat "$output_css"
-        echo "*********************************************"
-        echo "Copy the above to linkding's custom CSS field in admin settings"
-    fi
-
-    # Keep editor option
-    if ! type -P xclip &> /dev/null; then
-        echo "Note: xclip not found. Install with your package manager to enable clipboard support"
-    fi
-    echo -e "\nWould you like to edit the CSS before using it? (y/n): "
-    read edit_choice
-
-    if [[ $edit_choice =~ ^[Yy] ]]; then
-        echo -e "Enter editor name (default: edit): "
-        read editor_name
-        editor_name=${editor_name:-edit}
-        
-        if type -P "$editor_name" &> /dev/null; then
-            $editor_name "$output_css" &
-            echo "After editing, the content will need to be copied manually to linkding's custom CSS field"
+    # Generate initial CSS output and display
+    echo 
+    echo "**************CUSTOM LINKDING CSS *************"
+    cat "$output_css"
+    echo "*********************************************"
+    echo "Copy the above CSS to linkding's custom CSS field in admin settings"
+    
+    # Only offer clipboard/editor if not in SSH session
+    if [[ -z "$SSH_CLIENT" && -z "$SSH_TTY" ]]; then
+        # Clipboard handling
+        if type -P xclip &> /dev/null; then
+            cat "$output_css" | xclip -selection clipboard
+            echo "CSS has been copied to clipboard"
         else
-            echo "Editor '$editor_name' not found, skipping..."
+            echo "Note: xclip not found. Install with your package manager to enable clipboard support"
+        fi
+
+        # Editor option
+        echo -e "\nWould you like to edit the CSS before using it? (y/n): "
+        read edit_choice
+        if [[ $edit_choice =~ ^[Yy] ]]; then
+            echo -e "Enter editor name (default: edit): "
+            read editor_name
+            editor_name=${editor_name:-edit}
+            
+            if type -P "$editor_name" &> /dev/null; then
+                $editor_name "$output_css" &
+                echo "After editing, the content will need to be copied manually to linkding's custom CSS field"
+            else
+                echo "Editor '$editor_name' not found, skipping..."
+            fi
         fi
     fi
 }
