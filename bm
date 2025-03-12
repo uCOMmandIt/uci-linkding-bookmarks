@@ -137,7 +137,7 @@ container() {
         echo $HOST_VOLUME_PATH
         echo $BOOKMARKS_NAME
         echo $HOST_PORT
-        env || grep LD_
+        env | grep LD_
     fi    
 
 

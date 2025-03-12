@@ -1,6 +1,6 @@
 # Linkding Bookmarks Manager
 
-A Docker container management script for running multiple instances of the [linkding](https://github.com/sissbruecker/linkding) bookmark manager.
+A Docker container management script for running multiple instances of the [linkding](https://github.com/sissbruecker/linkding) bookmark manager.  Includes customizable title, logo and color theme.
 
 ## Installation
 
