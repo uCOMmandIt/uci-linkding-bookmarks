@@ -2,6 +2,16 @@
 
 A Docker container management script for running multiple instances of the [linkding](https://github.com/sissbruecker/linkding) bookmark manager.  Includes customizable title, logo and color theme.
 
+## Table of Contents
+- [Installation](#installation)
+- [Features](#features)
+- [Usage](#usage)
+- [Environment Variables - Configuration](#environment-variables---configuration)
+- [Requirements](#requirements)
+- [Data Management](#data-management)
+- [Customization](#customization)
+- [Support](#support)
+
 ## Installation
 
 **Current Release:  v1.0.0**
@@ -244,6 +254,16 @@ A template SVG file is provided in `assets/circle-template.svg` to help create c
 - ~100x100px recommended size
 
 The theme generator automatically rotates the logo's hue based on your selected theme color. This rotation calculation assumes your logo starts with the default Linkding purple color. Using a different base color will result in incorrect color transformations when themes are applied.
+
+## Support
+
+For questions, help, or feature suggestions, please use [GitHub Discussions](https://github.com/uCOMmandIt/uci-linkding-bookmarks/discussions). This is the best place to:
+- Get help with setup or configuration
+- Share ideas for new features
+- Show off your custom themes or logos
+- Ask general questions about usage
+
+Please reserve the [Issue Tracker](https://github.com/uCOMmandIt/uci-linkding-bookmarks/issues) for actual bugs or issues requiring code changes.
 
 
 
