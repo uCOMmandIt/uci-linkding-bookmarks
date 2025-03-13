@@ -36,6 +36,10 @@ Key Functions:
 
 This script is part of the Linkding Bookmarks project and is intended to be
 used through the associated shell script that provides a user-friendly interface.
+
+Requirements:
+    - Python 3.6 or higher
+    - No external dependencies (uses only standard library)
 """
 
 import sys

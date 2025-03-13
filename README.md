@@ -143,11 +143,16 @@ For full documentation of options, see [Linkding Options](https://linkding.link/
 
 ## Requirements
 
+- Linux-compatible shell with bash
+  - Linux distribution (recommended)
+  - macOS
+  - Windows with Linux emulator (WSL2, Cygwin, etc.)
 - Docker
 - docker-compose
 - netcat (for port checking)
 - xclip (optional, for clipboard support)
 - current user in docker group
+- Python 3.6 or higher (no external dependencies)
 
 ## Data Management
 
