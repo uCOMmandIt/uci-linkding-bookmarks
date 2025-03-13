@@ -4,12 +4,22 @@ A Docker container management script for running multiple instances of the [link
 
 ## Installation
 
+**Current Release:  v1.0.0**
+
 1. Clone this repository:
 ```bash
 cd /opt
-git clone https://git.ucommandit.org/uci/uci-linkding-bookmarks.git bookmarks
+git clone --branch v1.0.0 https://git.ucommandit.org/uci/uci-linkding-bookmarks.git bookmarks
 cd bookmarks
 ```
+or
+
+```bash
+cd /opt
+git clone --branch v1.0.0 https://github.com/uCOMmandIt/uci-linkding-bookmarks.git bookmarks
+cd bookmarks
+```
+> For latest development version, omit the `--branch v1.0.0` option
 
 > **Quick Start for CSS Only:**  
 > If you just want to generate custom CSS for an existing linkding instance:
@@ -54,6 +64,12 @@ git push myremote my-machine-name
 > - Remove `bookmarks/` from .gitignore (not recommended)
 > - Use `HOST_VOLUME_DIR` to store data in a backed-up location (recommended)
 
+
+6. Customize your theme and title after the site is up and running:
+```bash
+./bm css mybookmarks
+```
+see the [Customization](#customization) section below.
 
 ## Features
 
