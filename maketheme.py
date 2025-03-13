@@ -1,4 +1,42 @@
 #!/usr/bin/env python3
+"""
+maketheme.py - Dynamic CSS Theme Generator for Linkding Bookmarks
+
+This script generates a complete CSS color theme based on a single base color.
+It's specifically designed to work with Linkding bookmarks manager's custom CSS
+feature, allowing users to completely transform the UI with minimal effort.
+
+This generator can potentially be used with any site using Tailwind CSS or similar
+frameworks that support CSS variable-based theming, enabling runtime theme changes
+without needing to rebuild CSS files.
+
+Usage:
+    python3 maketheme.py <hex_color> [light|dark]
+    
+    - hex_color: Base color in #RRGGBB format (e.g., #50B464)
+    - scheme: Optional, 'light' or 'dark' (default is 'dark')
+
+How it works:
+    1. The script takes a base color and scheme (light/dark) as input
+    2. It creates a neutral version of the color to establish a baseline
+    3. It generates a complete set of CSS variables for:
+       - Contrast levels (from 5% to 90%)
+       - Text colors with proper hierarchical contrast
+       - UI element colors (buttons, inputs, borders)
+       - Interactive state colors (hover, focus, active)
+    4. It calculates a hue rotation for the logo to match the selected theme
+    5. Outputs a complete CSS theme that can be copied to Linkding's custom CSS field
+
+Key Functions:
+    - generate_theme(): The main function that produces the CSS output
+    - hex_to_rgb(), rgb_to_hsl(): Color format conversion utilities
+    - adjust_dl(): Creates a color between black and white using a neutral color's hue
+      on a custom 0-2 scale with 1 being neutral
+    - get_hue_rotation(): Calculates the hue rotation to transform logo colors
+
+This script is part of the Linkding Bookmarks project and is intended to be
+used through the associated shell script that provides a user-friendly interface.
+"""
 
 import sys
 import colorsys

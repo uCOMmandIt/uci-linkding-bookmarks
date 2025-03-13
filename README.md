@@ -26,7 +26,7 @@ git checkout -b my-machine-name
 3. Edit .gitignore to track your configurations:
 ```bash
 # Remove or comment out these lines:
-# /assets/*
+# /assets/custom-logo.*
 # /containers/*
 ```
 
@@ -178,17 +178,51 @@ once the css generator is done it will put the content in the clipboard (using x
 
 Then you paste that css into the Custom CSS field in the setting page, general tab followed by save.  And bang! your new colors and title.
 
+### Theme Generation
+
+The theme generator creates a complete CSS variable-based theme from a single base color:
+
+1. **Base Color Selection**: Choose any color in HEX format (#RRGGBB) to define your theme's primary color
+2. **Color Scale Generation**: The script calculates a complete set of contrast levels (5%-90%) derived from your base color
+3. **Adaptive Text Colors**: Text colors are generated with proper hierarchy and appropriate contrast for readability
+4. **Light/Dark Mode**: The theme generator handles both light and dark modes by inverting color relationships
+5. **UI Element Styling**: Generates appropriate colors for buttons, inputs, menus, and interactive states
+6. **Logo Integration**: Automatically calculates logo hue rotation to match your chosen theme
+
+The theme system uses CSS variables exclusively, allowing for:
+- Complete theme transformation without touching HTML
+- Proper color relationships throughout the UI
+- Consistent contrast levels for accessibility
+- Dynamic adjustments of all derived colors when just the base color changes
+
+This generator is based on color theory principles to ensure all generated themes maintain proper contrast ratios and visual hierarchy regardless of the chosen base color.
+
+The actual color calculations are performed in the `maketheme.py` script, which contains detailed documentation about the color theory implementation. For those interested in the technical details or adapting the theme generator for other projects, this file provides a comprehensive overview of the approach.
+
 ### Logo Replacement
 
-creat an `assest` folder and place your logo at `assets/custom-logo.png` to replace the default linkding logo.
+A template SVG file is provided in `assets/circle-template.svg` to help create custom logos with the correct base color (#815EE8).
 
-The image should be:
+**Steps to create a custom logo:**
+
+1. Start with the provided template: `assets/circle-template.svg`
+2. Edit the SVG in your preferred vector editor (Inkscape, Illustrator, or online SVG editors)
+   - **Alternative:** Use an AI assistant to generate SVG code from a simple description (e.g., "Create an SVG logo of a cat with the main color #815EE8 and transparent background")
+3. Keep the purple color (#815EE8) as your main color for proper theme rotation
+4. Save your modified SVG as `assets/custom-logo.svg`
+5. Convert to PNG using ImageMagick:
+   ```bash
+   magick assets/custom-logo.svg -background none -resize 100x100 assets/custom-logo.png
+   ```
+
+**IMPORTANT:** The image MUST have:
+- Transparent background (not white)
+- Main logo color should match Linkding's purple base color (#815EE8)
 - PNG format
 - Square aspect ratio (1:1)
 - ~100x100px recommended size
 
-if you take the logo.svg file from the repo and use that for dimensions then you can run magick on it to create the png and it will work fine.  AI can be helpful for drawing an svg from a description.
-
+The theme generator automatically rotates the logo's hue based on your selected theme color. This rotation calculation assumes your logo starts with the default Linkding purple color. Using a different base color will result in incorrect color transformations when themes are applied.
 
 
 
