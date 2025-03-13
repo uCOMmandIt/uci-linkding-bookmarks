@@ -76,16 +76,16 @@ bm <command> [options] <bookmarks-name>
 - `restart`  Restart the bookmarks container
 - `log`      Show logs from the bookmarks container
 - `config`   Display the Docker Compose configuration
-           -e        Configure environment variables (port, paths, credentials)
+    - `-e`   EditConfigure environment variables (port, paths, credentials)
 - `admin`    Run commands in the container:
-           -s        Open an interactive shell
-           -x        Execute a shell command
-           [args]    Run Django manage.py commands (default)
+    - `-s`        Open an interactive shell
+    - `-x`        Execute a shell command
+    - `[args]`    Run Django manage.py commands (default)
 - `delete`   Delete container, environment file and data (DANGEROUS!)
 
 ### Commands with optional bookmarks name:
 - `status`   Show status of all instances or specific instance
-           -q        Quiet mode - only output running instance names
+    -  `-q` Quiet mode - only output running instance names
 
 ### Commands that don't use bookmarks name:
 - `upgrade`  Upgrade all instances to latest linkding version
@@ -103,44 +103,12 @@ bm status mybookmarks     # Check specific instance status
 bm upgrade               # Upgrade all instances to latest version
 ```
 
-### Notes
-- First run will create a .env file if port 9090 is in use
-- assets/custom-logo.png will replace default logo if present
-- Generated CSS files are named: <bookmarks>-custom[-light|-dark].css
+## Environment Variables - Configuration
 
-## Data Management
+Each instance/container gets a corresponding <name>.env in /containers
 
-### Customization
-Place `custom-logo.png` in the `assets` folder to replace the default logo.
+`./bm config -e` will allow you to run the configurator (recommended) or edit the file directly.
 
-Custom title and themes are available through the `css` command:
-```bash
-./bm css mybookmarks
-```
-
-<img src="custom-title-theme.png" width="600" alt="Custom Title and Theme">
-
-The generated CSS can be pasted into the Settings [General] page of your bookmarks instance.
-
-### Data Location
-Bookmark data is stored in:
-- `./bookmarks/<name>/` by default
-- Configurable via `HOST_VOLUME_DIR` or full custom path
-
-### Deletion
-The delete command removes:
-1. Container instance
-2. Environment configuration
-3. All bookmark data
-
-Requires two confirmations:
-```bash
-./bm delete mybookmarks
-```
-
-## Configuration
-
-### Environment Variables
 Basic settings configured through `bm config -e`:
 - `HOST_PORT` - Container port (default: 9090)
 - `HOST_VOLUME_DIR` - Base data directory
@@ -164,3 +132,64 @@ For full documentation of options, see [Linkding Options](https://linkding.link/
 - netcat (for port checking)
 - xclip (optional, for clipboard support)
 - current user in docker group
+
+## Data Management
+
+### Persistent Data Location on Host
+
+Bookmark data is stored in:
+- `./bookmarks/<name>/` by default
+- Configurable via `HOST_VOLUME_DIR` or full custom path (recommended)
+
+### Deletion
+The delete command removes:
+1. Container instance
+2. Environment configuration
+3. All bookmark data
+
+Requires two confirmations:
+```bash
+./bm delete mybookmarks
+```
+## Customization
+
+### Title and Color Theme
+
+If you just want to generate custom CSS for an existing linkding instance:
+
+```bash
+./bm css throwawayname 
+```
+
+otherwise use the bookmarks instance name and a file will be created at `containers/<name>.custom.<scheme>.css` that you can reuse without generating again.
+
+```bash
+./bm css <name> 
+```
+
+Running the css command will walk you through setting
+
+1. custom webpage title
+2. Webpage color theme.   
+
+environment variables of these settings will be saved in the bookmarks env file and if the css command is issued again will be used as defaults.  
+
+once the css generator is done it will put the content in the clipboard (using xclip) and also show the in the terminal for copy, or you can open your favorite edtior to review and copy.
+
+Then you paste that css into the Custom CSS field in the setting page, general tab followed by save.  And bang! your new colors and title.
+
+### Logo Replacement
+
+creat an `assest` folder and place your logo at `assets/custom-logo.png` to replace the default linkding logo.
+
+The image should be:
+- PNG format
+- Square aspect ratio (1:1)
+- ~100x100px recommended size
+
+if you take the logo.svg file from the repo and use that for dimensions then you can run magick on it to create the png and it will work fine.  AI can be helpful for drawing an svg from a description.
+
+
+
+
+

@@ -293,10 +293,6 @@ def generate_theme(base_color: str, scheme: str = 'dark') -> str:
     filter: hue-rotate({logo_rotation}deg) saturate(130%) brightness(120%) !important;
 }}
 
-/* Special header styling not covered by variables */
-header h1::after {{
-    color: var(--primary-text-color);
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
 }}"""
     return css
 

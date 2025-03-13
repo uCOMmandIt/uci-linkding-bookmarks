@@ -642,6 +642,7 @@ bm_customcss() {
     local scheme_suffix=""   # Will be set after theme selection
     local output_css="${prefix}custom.css"
     local custom_title=""    # Variable to store title
+    local env_file="containers/${1}.env"
 
     echo "=== Linkding Custom CSS Generator ==="
     echo -e "\nThis will generate '${output_css}' with custom title and/or color theme for linkding."
@@ -650,64 +651,137 @@ bm_customcss() {
     echo -e "--------------------------------------------------------\n"
 
     # Ask for custom site title first
-    echo -e "\nEnter custom site title (leave empty for default 'linkding'): "
-    read custom_title
-
+    echo -e "\nEnter custom site title"
+    echo -e  "or <return> to keep current title: ${LD_SITE_TITLE:-linkding}\n"
+    read -p "> " title
+    LD_SITE_TITLE=${title:-$LD_SITE_TITLE}
+     
+    
     # Color theme selection
-    echo -e "\nSelect a color theme:"
+    echo -e "\n------- Color Theme ---------"
+
+    echo "Current theme: ${LD_THEME:-Linkding} (${LD_SITE_BASE_COLOR:-default})"
+    echo "Current scheme: ${LD_SCHEME:-dark}"
+
+    echo -e "\n\nSelect a color theme:"
     echo "1) Linkding Purple (no color theme change)"
     echo "2) Forest Green"
     echo "3) Ocean Blue"
     echo "4) Crimson"
     echo "5) Turquoise"
     echo "Or enter a custom hex color (e.g., #FF5733)"
+    echo "Or <return> to keep current"
     
-    read -p "Choice [1]: " choice
-    choice=${choice:-1}
-    
-    # Check for default case (no changes needed)
-    if [[ -z "$custom_title" && ($choice == "1" || -z "$choice") ]]; then
-        echo -e "\nNo changes requested - using default linkding theme and title."
-        echo "Your installation will use the default purple theme and 'linkding' title."
-        return 0
-    fi
+    read -p "Choice: " choice
 
-    # Process non-default theme choices
+    # Process theme choices
     case $choice in
-        1|"") 
-         choice=""
-         ;;
-        2) base_color="#50B464"; color_name="Forest Green" ;;
-        3) base_color="#3D8DD1"; color_name="Ocean Blue" ;;
-        4) base_color="#D6223A"; color_name="Crimson" ;;
-        5) base_color="#22D6BB"; color_name="Turquoise" ;;
+        "")
+            # Empty input - do nothing
+            echo "No theme change selected, keeping current settings"
+            ;;
+        1) 
+            # Reset to default theme (unset variables)
+            unset LD_THEME
+            unset LD_SITE_BASE_COLOR
+            unset LD_SCHEME
+            ;;
+         2) 
+            LD_SITE_BASE_COLOR="#50B464" 
+            LD_THEME="Forest Green"
+            ;;
+        3) 
+            LD_SITE_BASE_COLOR="#3D8DD1" 
+            LD_THEME="Ocean Blue"
+            ;;
+        4) 
+            LD_SITE_BASE_COLOR="#D6223A" 
+            LD_THEME="Crimson"
+            ;;
+        5) 
+            # Adjust the turquoise color to be more true to the name
+            LD_SITE_BASE_COLOR="#20B2AA" # Adjusted to be a more balanced turquoise
+            LD_THEME="Turquoise"
+            ;;
         \#*) 
-            base_color="$choice"
-            if [[ ! $base_color =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+            LD_SITE_BASE_COLOR="$choice"
+            if [[ ! $LD_SITE_BASE_COLOR =~ ^#[0-9A-Fa-f]{6}$ ]]; then
                 echo "Error: Invalid hex color format. Please use format #RRGGBB"
                 return 1
             fi
             echo -e "\nEnter a name for your custom theme: "
-            read color_name
-            color_name=${color_name:-"Custom"} ;;
+            read LD_THEME
+            LD_THEME=${LD_THEME:-"Custom"}
+            ;;
         *)
-            echo "Invalid selection, using default Purple theme"
-            base_color="#815EE8"
-            color_name="Purple (Default)" ;;
+            # Invalid input - check if it's empty
+            if [[ -z "$choice" ]]; then
+                echo "No theme change selected, keeping current settings"
+            else
+                # Otherwise reset to default
+                echo "Invalid selection, using default Purple theme"
+                unset LD_THEME
+                unset LD_SITE_BASE_COLOR
+                unset LD_SCHEME
+            fi
+            ;;
     esac
+
+      # Check for default case (no changes needed)
+    if [[ -z "$LD_SITE_TITLE" && ! $LD_THEME ]]; then
+        echo -e "\nNo changes requested - using default linkding theme and title."
+        echo "no custom css will be generated"
+        echo "simply remove custom css from the settings UI."
+        return 0
+    fi
     
     # Theme variant selection - skip for default theme
-    if [[ -n "$choice" ]]; then
-        echo -e "\nSelect scheme (d)ark or (l)ight [default: dark]: "
+    if [[ $choice && $choice != "1" ]]; then
+        # Use existing scheme as default if available
+        local default_scheme=${LD_SCHEME:-dark}
+        local scheme_suffix
+        echo -e "\nSelect scheme (d)ark or (l)ight [default: $default_scheme]: "
         read scheme_choice
         
         if [[ $scheme_choice =~ ^[Ll] ]]; then
-            scheme="light"
+            LD_SCHEME="light"
             scheme_suffix="-light"
         else
-            scheme="dark"
+            LD_SCHEME="dark"
             scheme_suffix="-dark"
         fi
+    fi
+
+    # Save changes to environment file if we have an instance name
+    if [[ -n "$1" && -f "$env_file" ]]; then
+        echo "Saving theme preferences to environment file..."
+        
+        # Define a function to update or remove variables in env file
+        update_env_file() {
+            local key=$1
+            local value=$2
+            
+            # If value is unset or empty, remove the variable
+            if [[ -z "$value" ]]; then
+                sed -i "/^${key}=/d" "$env_file"
+            # If variable exists, update it
+            elif grep -q "^${key}=" "$env_file"; then
+                sed -i "s|^${key}=.*|${key}=\"${value}\"|" "$env_file"
+            # Otherwise add it
+            else
+                # Ensure file ends with newline
+                [[ -s "$env_file" && $(tail -c1 "$env_file" | wc -l) -eq 0 ]] && echo "" >> "$env_file"
+                echo "${key}=\"${value}\"" >> "$env_file"
+            fi
+        }
+        
+        # Update or remove each variable
+        update_env_file "LD_SITE_TITLE" "$LD_SITE_TITLE"
+        update_env_file "LD_THEME" "$LD_THEME"
+        update_env_file "LD_SITE_BASE_COLOR" "$LD_SITE_BASE_COLOR"
+        update_env_file "LD_SCHEME" "$LD_SCHEME"
+        
+        echo "Environment file updated!"
     fi
 
     # Update output filename to include scheme
@@ -717,28 +791,47 @@ bm_customcss() {
     cat << EOF > "$output_css"
 /* Custom CSS file for Linkding created on */
 /* $(date) */    
-$([[ $choice ]] && echo "/* Theme: ${color_name} (${base_color}) */")
-$([[ -n "$custom_title" ]] && echo "/* Title: ${custom_title} */")
+$([[ $LD_THEME ]] && echo "/* Theme: $LD_THEME ($LD_SITE_BASE_COLOR) - $LD_SCHEME */")
+$([[ $LD_SITE_TITLE ]] && echo "/* Title: $LD_SITE_TITLE */")
 /* *******************************************/
+EOF
 
+    # Conditionally append title styling
+    if [[ -n "$LD_SITE_TITLE" ]]; then
+        cat << TITLE_CSS >> "$output_css"
 /* Header text styling */
 header h1 {
     font-size: 0;
+    position: relative;
 }
 
 header h1::before {
-    content: "${custom_title:-linkding}";
+    content: "${LD_SITE_TITLE}";
     font-size: 1.5rem;
     color: var(--primary-text-color);
+    display: block;
 }
-EOF
 
-    if [[ $choice ]]; then
-        echo -e "\nGenerating $scheme theme with base color $base_color ($color_name)"
-        python3 maketheme.py "$base_color" "$scheme" >> "$output_css"
+/* Add powered by linkding attribution */
+header h1::after {
+    content: "powered by linkding";
+    position: absolute;
+    bottom: -1.2rem; /* Position below the title */
+    left: 0;
+    font-size: 0.7rem;
+    opacity: 0.8; /* Slightly increased from 0.7 for better visibility */
+    color: var(--contrast-70);
+    text-shadow: 0 1px 2px var(--contrast-90);
+}
+TITLE_CSS
+    fi
+   
+    if [[ -n "$LD_SITE_BASE_COLOR" ]]; then
+        echo -e "\nGenerating ${LD_SCHEME:-dark} theme with base color $LD_SITE_BASE_COLOR ($LD_THEME)"
+        python3 maketheme.py "$LD_SITE_BASE_COLOR" "${LD_SCHEME:-dark}" >> "$output_css"
     fi
 
-    # Generate initial CSS output and display
+    # Generate CSS output and display
     echo 
     echo "**************CUSTOM LINKDING CSS *************"
     cat "$output_css"
